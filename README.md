@@ -34,7 +34,7 @@ dbo          | FirstTable | me@demo.com | My first table
 
 And changing/setting the value would just be an update:
 ```SQL
-UPDATE Documentation.ExtendedTabelProperties SET Contact = 'new@demo.com' WHERE Contact = 'me@demo.com'
+UPDATE Documentation.ExtendedTableProperties SET Contact = 'new@demo.com' WHERE Contact = 'me@demo.com'
 SELECT * FROM Documentation.ExtendedTableProperties WHERE TABLE_NAME = 'FirstTable'
 ```
 SCHEMA_NAME       | TABLE_NAME | Contact |MS_Description
