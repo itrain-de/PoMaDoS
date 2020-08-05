@@ -1,4 +1,4 @@
-# pmdsql
+# PoMaDoS
 ## Poor man's documentation for SQL Server
 This repository contains scripts that hide the complexity of the functions needed in Transact-SQL to select, insert, update and delete extended properties in SQL Server.
 
