@@ -75,7 +75,7 @@ ON (	src.name = trg.propertyname  AND src.objtype = trg.objtype COLLATE Latin1_G
 	UPDATE SET columnnumber = num
 WHEN NOT MATCHED BY target THEN 
 	INSERT (objtype, propertyname, usagecount, includeinview) VALUES ( src.objtype, src.name, src.num, 1)
-WHEN NOT MATCHED BY source THEN 
+WHEN NOT MATCHED BY source AND trg.objtype IN ('TABLE', 'VIEW', 'FUNCTION', 'PROCEDURE', 'FOREIGNKEY', 'TRIGGER') THEN 
 	UPDATE SET Columnnumber = 0 
 ;
 
@@ -96,7 +96,7 @@ ON (	src.name = trg.propertyname AND src.objtype = trg.objtype COLLATE Latin1_Ge
 	UPDATE SET columnnumber = num
 WHEN NOT MATCHED BY target THEN 
 	INSERT (objtype, propertyname, usagecount, includeinview) VALUES ( src.objtype, src.name, src.num, 1)
-WHEN NOT MATCHED BY source THEN 
+WHEN NOT MATCHED BY source AND trg.objtype IN ('COLUMN') THEN 
 	UPDATE SET Columnnumber = 0 
 ;
 
@@ -116,7 +116,7 @@ ON (	src.name = trg.propertyname AND src.objtype = trg.objtype COLLATE Latin1_Ge
 	UPDATE SET columnnumber = num
 WHEN NOT MATCHED BY target THEN 
 	INSERT (objtype, propertyname, usagecount, includeinview) VALUES ( src.objtype, src.name, src.num, 1)
-WHEN NOT MATCHED BY source THEN 
+WHEN NOT MATCHED BY source AND trg.objtype IN ('PARAMETER') THEN 
 	UPDATE SET Columnnumber = 0 
 ;
 GO
@@ -259,7 +259,7 @@ FETCH NEXT FROM cProperties INTO @propertyName
 WHILE @@FETCH_STATUS = 0 
 BEGIN
 	SET @SQLColumn += ', CAST(' + QUOTENAME(@propertyName) + '.value AS nvarchar(4000))  ' + QUOTENAME(@PropertyName)
-	SET @SQLApply += 'OUTER APPLY ::fn_listextendedproperty(''' + @PropertyName +  ''', ''schema'', SCHEMA_NAME(schema_id), ''TABLE'', viw.name, DEFAULT, DEFAULT)	' + QUOTENAME(@PropertyName) 
+	SET @SQLApply += 'OUTER APPLY ::fn_listextendedproperty(''' + @PropertyName +  ''', ''schema'', SCHEMA_NAME(schema_id), ''VIEW'', viw.name, DEFAULT, DEFAULT)	' + QUOTENAME(@PropertyName) 
 	SET @columnlist = ISNULL(@columnlist + ', ' + QUOTENAME(@PropertyName) , QUOTENAME(@PropertyName))
 	FETCH NEXT FROM cProperties INTO @propertyName
 END 
