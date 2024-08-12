@@ -72,11 +72,11 @@ USING (SELECT	DISTINCT	xpr.name,
 									ELSE so.Type END ) src
 ON (	src.name = trg.propertyname  AND src.objtype = trg.objtype COLLATE Latin1_General_CI_AS)
  WHEN MATCHED THEN 
-	UPDATE SET columnnumber = num
+	UPDATE SET usagecount = num
 WHEN NOT MATCHED BY target THEN 
 	INSERT (objtype, propertyname, usagecount, includeinview) VALUES ( src.objtype, src.name, src.num, 1)
 WHEN NOT MATCHED BY source AND trg.objtype IN ('TABLE', 'VIEW', 'FUNCTION', 'PROCEDURE', 'FOREIGNKEY', 'TRIGGER') THEN 
-	UPDATE SET Columnnumber = 0 
+	UPDATE SET usagecount = 0 
 ;
 
 MERGE INTO [Documentation].[ExtendedPropertiesConfiguration] trg
@@ -93,11 +93,11 @@ USING (	SELECT		DISTINCT	xpr.name,
 		GROUP BY	xpr.name) src
 ON (	src.name = trg.propertyname AND src.objtype = trg.objtype COLLATE Latin1_General_CI_AS)
  WHEN MATCHED THEN 
-	UPDATE SET columnnumber = num
+	UPDATE SET usagecount = num
 WHEN NOT MATCHED BY target THEN 
 	INSERT (objtype, propertyname, usagecount, includeinview) VALUES ( src.objtype, src.name, src.num, 1)
 WHEN NOT MATCHED BY source AND trg.objtype IN ('COLUMN') THEN 
-	UPDATE SET Columnnumber = 0 
+	UPDATE SET usagecount = 0 
 ;
 
 MERGE INTO [Documentation].[ExtendedPropertiesConfiguration] trg
@@ -113,11 +113,11 @@ USING (	SELECT	DISTINCT	xpr.name,
 		GROUP BY	xpr.name) src
 ON (	src.name = trg.propertyname AND src.objtype = trg.objtype COLLATE Latin1_General_CI_AS)
  WHEN MATCHED THEN 
-	UPDATE SET columnnumber = num
+	UPDATE SET usagecount = num
 WHEN NOT MATCHED BY target THEN 
 	INSERT (objtype, propertyname, usagecount, includeinview) VALUES ( src.objtype, src.name, src.num, 1)
 WHEN NOT MATCHED BY source AND trg.objtype IN ('PARAMETER') THEN 
-	UPDATE SET Columnnumber = 0 
+	UPDATE SET usagecount = 0 
 ;
 GO
 
