@@ -124,6 +124,116 @@ GO
 EXEC Documentation.syncExtendedPropertiesConfigurationCount
 GO
 
+CREATE OR ALTER   PROC	[Documentation].[GenerateExtendedDatabasePropertiesView]
+				@Debug bit = 0 
+AS
+SET NOCOUNT ON
+DECLARE @SQLView nvarchar(max)
+DECLARE @SQLTrigger nvarchar(max)
+DECLARE @SQLColumn nvarchar(max) = '', @SQLApply nvarchar(max) = ''
+DECLARE @columnlist nvarchar(max)
+DECLARE @ViewName nvarchar(255), @PropertyName nvarchar(255)
+SET @ViewName = 'ExtendedDatabaseProperties'
+DECLARE cProperties CURSOR LOCAL FAST_FORWARD FOR 
+	SELECT	propertyname 
+	FROM	Documentation.ExtendedPropertiesConfiguration 
+	WHERE	objtype = 'DATABASE' 
+	AND		includeinview = 1
+	ORDER BY columnnumber
+OPEN cProperties
+FETCH NEXT FROM cProperties INTO @propertyName --, @DisplayName
+WHILE @@FETCH_STATUS = 0 
+BEGIN
+	SET @SQLColumn += ', CAST(' + QUOTENAME(@propertyName) + '.value AS nvarchar(4000))  ' + QUOTENAME(@PropertyName)
+	SET @SQLApply += 'OUTER APPLY ::fn_listextendedproperty(''' + @PropertyName +  ''', DEFAULT, DEFAULT, DEFAULT, DEFAULT, DEFAULT, DEFAULT)	' + QUOTENAME(@PropertyName) 
+	SET @columnlist = ISNULL(@columnlist + ', ' + QUOTENAME(@PropertyName) , QUOTENAME(@PropertyName))
+	FETCH NEXT FROM cProperties INTO @propertyName --, @DisplayName
+END 
+CLOSE cProperties
+DEALLOCATE cProperties
+
+SET @SQLView = 'CREATE OR ALTER VIEW [Documentation].' + QUOTENAME(@ViewName) + '
+WITH VIEW_METADATA
+AS
+SELECT		CAST(DB_NAME() AS nvarchar(255))	[DATABASE_NAME] '
+SET @SQLView += @SQLColumn
+SET @SQLView += ' FROM sys.databases d
+'
+SET @SQLView += @SQLApply
+SET @SQLView += ' WHERE d.name = DB_NAME()'
+IF @Debug = 1 PRINT @SQLView
+EXEC sp_executeSQL @SQLView 
+
+SET @SQLTrigger = 'CREATE OR ALTER TRIGGER [Documentation].' + QUOTENAME( @ViewName + 'Trigger') + ' ON [Documentation].' + QUOTENAME(@ViewName) + '
+INSTEAD OF UPDATE
+AS
+SET NOCOUNT ON
+	DECLARE @colBitmap varbinary(2)
+	DECLARE @NumOfColumns int
+	DECLARE @Database varchar(255)
+	DECLARE @Property varchar(255)
+	DECLARE @Value SQL_VARIANT
+	DECLARE @Changes TABLE (DATABASE_NAME varchar(255), Value SQL_VARIANT, PropName varchar(255))
+	DECLARE @curColumnId int = 1
+	INSERT INTO @Changes
+		SELECT	*
+		FROM	(SELECT	*	FROM	inserted i
+				 UNPIVOT	(Res FOR Value IN ( ' + @columnlist + ') ) un ) un
+
+	DECLARE cDaten CURSOR FAST_FORWARD FOR 
+		SELECT		DATABASE_NAME
+		FROM		inserted i
+	OPEN cDaten
+	FETCH NEXT FROM cDaten INTO @Database
+	WHILE @@FETCH_STATUS = 0 
+	BEGIN
+		SET @curColumnId = 2	-- ignore first column
+		SELECT @NumOfColumns = COUNT(*) FROM sys.columns WHERE OBJECT_ID(''Documentation.' + @ViewName + ''') = object_id
+		IF @NumOfColumns < 9	
+				SET @colBitmap = SUBSTRING( COLUMNS_UPDATED(), 1, 1)
+		ELSE
+				SET @colBitmap = SUBSTRING( COLUMNS_UPDATED(), 2, 1) + SUBSTRING(Columns_UPDATED(), 1,1)
+			WHILE @curColumnId <= @NumOfColumns
+			BEGIN
+				IF @colBitmap & POWER(2, (@curColumnId -1)) = POWER(2, (@curColumnId -1)) 
+				BEGIN
+					SET		@Value = NULL
+					SELECT	@Property = name 
+					FROM	sys.columns 
+					WHERE	OBJECT_ID(''Documentation.' + @ViewName + ''') = object_id 
+					AND		column_id = @curColumnId
+					SELECT	@Value = Value 
+					FROM	@Changes 
+					WHERE	PropName = @Property 
+					AND		DATABASE_NAME = @Database
+					IF EXISTS (SELECT * FROM ::fn_listextendedproperty(@Property, DEFAULT, DEFAULT, DEFAULT, DEFAULT, DEFAULT, DEFAULT))
+					BEGIN
+						IF @Value IS NULL OR DATALENGTH(@Value) = 0 
+						BEGIN
+							EXEC sp_dropextendedproperty  @Property, DEFAULT, DEFAULT, DEFAULT, DEFAULT, DEFAULT, DEFAULT
+						END
+						ELSE
+						BEGIN
+							EXEC sp_updateextendedproperty @Property,  @Value,  DEFAULT, DEFAULT, DEFAULT, DEFAULT, DEFAULT, DEFAULT
+						END
+					END
+					ELSE
+					BEGIN
+						IF @Value IS NOT NULL AND DATALENGTH(@Value) > 0 
+							EXEC sp_addextendedproperty @Property, @Value,  DEFAULT, DEFAULT, DEFAULT, DEFAULT, DEFAULT, DEFAULT
+					END
+				END -- Change detected
+				SET @curColumnId += 1
+			END
+	FETCH NEXT FROM cDaten INTO @Database
+	END
+	CLOSE cDaten
+	DEALLOCATE cDaten
+'
+EXEC sp_executeSQL @SQLTrigger
+IF @Debug = 1 PRINT @SQLTrigger
+GO
+
 CREATE OR ALTER   PROC	[Documentation].[GenerateExtendedTablePropertiesView]
 				@Debug bit = 0 
 AS
@@ -230,6 +340,124 @@ SET NOCOUNT ON
 				SET @curColumnId += 1
 			END
 	FETCH NEXT FROM cDaten INTO @Schema, @Table
+	END
+	CLOSE cDaten
+	DEALLOCATE cDaten
+'
+EXEC sp_executeSQL @SQLTrigger
+IF @Debug = 1 PRINT @SQLTrigger
+GO
+
+CREATE OR ALTER   PROC	[Documentation].[GenerateExtendedColumnPropertiesView]
+				@Debug bit = 0 
+AS
+SET NOCOUNT ON
+DECLARE @SQLView nvarchar(max)
+DECLARE @SQLTrigger nvarchar(max)
+DECLARE @SQLColumn nvarchar(max) = '', @SQLApply nvarchar(max) = ''
+DECLARE @columnlist nvarchar(max)
+DECLARE @ViewName nvarchar(255), @PropertyName nvarchar(255)
+SET @ViewName = 'ExtendedColumnProperties'
+DECLARE cProperties CURSOR LOCAL FAST_FORWARD FOR 
+	SELECT	propertyname 
+	FROM	Documentation.ExtendedPropertiesConfiguration 
+	WHERE	objtype = 'COLUMN' 
+	AND		includeinview = 1
+	ORDER BY columnnumber
+OPEN cProperties
+FETCH NEXT FROM cProperties INTO @propertyName --, @DisplayName
+WHILE @@FETCH_STATUS = 0 
+BEGIN
+	SET @SQLColumn += ', CAST(' + QUOTENAME(@propertyName) + '.value AS nvarchar(4000))  ' + QUOTENAME(@PropertyName)
+	SET @SQLApply += 'OUTER APPLY ::fn_listextendedproperty(''' + @PropertyName +  ''', ''schema'', SCHEMA_NAME(schema_id), ''TABLE'', tab.name, ''COLUMN'', col.name)	' + QUOTENAME(@PropertyName) 
+	SET @columnlist = ISNULL(@columnlist + ', ' + QUOTENAME(@PropertyName) , QUOTENAME(@PropertyName))
+	FETCH NEXT FROM cProperties INTO @propertyName --, @DisplayName
+END 
+CLOSE cProperties
+DEALLOCATE cProperties
+
+SET @SQLView = 'CREATE OR ALTER VIEW [Documentation].' + QUOTENAME(@ViewName) + '
+WITH VIEW_METADATA
+AS
+SELECT		CAST(SCHEMA_NAME(Schema_id) AS nvarchar(255))				[SCHEMA_NAME] , 
+			CAST(tab.name AS nvarchar(255))							    [TABLE_NAME] ,
+			CAST(col.name AS nvarchar(255))							    [COLUMN_NAME] '
+SET @SQLView += @SQLColumn
+SET @SQLView += '
+FROM sys.tables tab
+INNER JOIN sys.columns col
+ON col.object_id = tab.object_id
+'
+SET @SQLView += @SQLApply
+IF @Debug = 1 PRINT @SQLView
+EXEC sp_executeSQL @SQLView 
+
+SET @SQLTrigger = 'CREATE OR ALTER TRIGGER [Documentation].' + QUOTENAME( @ViewName + 'Trigger') + ' ON [Documentation].' + QUOTENAME(@ViewName) + '
+INSTEAD OF UPDATE
+AS
+SET NOCOUNT ON
+	DECLARE @colBitmap varbinary(2)
+	DECLARE @NumOfColumns int
+	DECLARE @Schema varchar(255)
+	DECLARE @Property varchar(255)
+	DECLARE @Table sysname, @Column sysname
+	DECLARE @Value SQL_VARIANT
+	DECLARE @Changes TABLE (schemaName sysname, tabName sysName, colName sysName, Value SQL_VARIANT, PropName varchar(255))
+	DECLARE @curColumnId int = 1
+	INSERT INTO @Changes
+		SELECT	*
+		FROM	(SELECT	*	FROM	inserted i
+				 UNPIVOT	(Res FOR Value IN ( ' + @columnlist + ') ) un ) un
+
+	DECLARE cDaten CURSOR FAST_FORWARD FOR 
+		SELECT		SCHEMA_NAME, 
+					TABLE_NAME, 
+					COLUMN_NAME
+		FROM		inserted i
+	OPEN cDaten
+	FETCH NEXT FROM cDaten INTO @Schema, @Table, @Column
+	WHILE @@FETCH_STATUS = 0 
+	BEGIN
+		SET @curColumnId = 4	-- ignore first 3 columns
+		SELECT @NumOfColumns = COUNT(*) FROM sys.columns WHERE OBJECT_ID(''Documentation.' + @ViewName + ''') = object_id
+		IF @NumOfColumns < 9	
+				SET @colBitmap = SUBSTRING( COLUMNS_UPDATED(), 1, 1)
+		ELSE
+				SET @colBitmap = SUBSTRING( COLUMNS_UPDATED(), 2, 1) + SUBSTRING(Columns_UPDATED(), 1,1)
+			WHILE @curColumnId <= @NumOfColumns
+			BEGIN
+				IF @colBitmap & POWER(2, (@curColumnId -1)) = POWER(2, (@curColumnId -1)) 
+				BEGIN
+					SET		@Value = NULL
+					SELECT	@Property = name 
+					FROM	sys.columns 
+					WHERE	OBJECT_ID(''Documentation.' + @ViewName + ''') = object_id 
+					AND		column_id = @curColumnId
+					SELECT	@Value = Value 
+					FROM	@Changes 
+					WHERE	PropName = @Property 
+					AND		SchemaName = @Schema
+					AND		TabName = @Table
+					IF EXISTS (SELECT * FROM ::fn_listextendedproperty(@Property, ''schema'', @schema, ''table'', @Table, ''column'', @Column))
+					BEGIN
+						IF @Value IS NULL OR DATALENGTH(@Value) = 0 
+						BEGIN
+							EXEC sp_dropextendedproperty  @Property, ''schema'', @schema, ''table'', @Table, ''column'', @Column
+						END
+						ELSE
+						BEGIN
+							EXEC sp_updateextendedproperty @Property,  @Value,  ''schema'', @schema, ''table'', @Table, ''column'', @Column
+						END
+					END
+					ELSE
+					BEGIN
+						IF @Value IS NOT NULL AND DATALENGTH(@Value) > 0 
+							EXEC sp_addextendedproperty @Property, @Value,  ''schema'', @Schema, ''table'', @Table, ''column'', @Column
+					END
+				END -- Change detected
+				SET @curColumnId += 1
+			END
+	FETCH NEXT FROM cDaten INTO @Schema, @Table, @Column
 	END
 	CLOSE cDaten
 	DEALLOCATE cDaten
